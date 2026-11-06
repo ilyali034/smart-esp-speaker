@@ -9,6 +9,7 @@ import numpy as np
 import websockets
 
 from . import brain
+from .brain import alarm
 from .audio import RATE
 
 log = logging.getLogger("session")
@@ -30,6 +31,7 @@ class Session:
         self._reset_listen()
         self._job = None
         self._interrupted = False
+        self._alarm_listening = False
         self._deaf_until = 0.0
         self._m_t, self._m_rms, self._m_score = time.time(), 0.0, 0.0
         self._dump, self._dump_n = [], 0
@@ -91,6 +93,11 @@ class Session:
             self.muted = bool(msg.get("muted"))
             log.info("[%s] hello, rate=%s", self.name, msg.get("rate"))
             await self.send_json({"type": "volume", "value": self.app.volume})
+            now = time.localtime()
+            await self.send_json({"type": "clock", "datetime": [
+                now.tm_year, now.tm_mon, now.tm_mday, now.tm_wday,
+                now.tm_hour, now.tm_min, now.tm_sec,
+            ]})
             await self.set_state("idle")
         elif t == "mute":
             self.muted = bool(msg.get("value"))
@@ -98,9 +105,19 @@ class Session:
             if self.muted and self.state == "listening":
                 self._reset_listen()
                 await self.set_state("idle")
+        elif t == "alarm_ringing":
+            self._alarm_listening = True
+            self._interrupted = self._job is not None
+            if self._job:
+                self._job.cancel()
+                self._job = None
+            self._reset_wake()
+            self._reset_listen()
+            await self.send_json({"type": "stop"})
+            await self.set_state("alarm_listening")
 
     async def on_audio(self, data: bytes):
-        if self.muted or self.state not in ("idle", "listening", "speaking"):
+        if self.muted or self.state not in ("idle", "listening", "speaking", "alarm_listening"):
             return
         valid_len = (len(data) // 2) * 2
         if valid_len == 0:
@@ -116,8 +133,8 @@ class Session:
         if self.state == "idle":
             self._dump_audio(pcm)
             await self._on_idle_audio(pcm)
-        elif self.state == "listening":
-            await self._on_listening_audio(pcm)
+        elif self.state in ("listening", "alarm_listening"):
+            await self._on_listening_audio(pcm, from_alarm=self.state == "alarm_listening")
         elif self.state == "speaking" and self.app.barge_in:
             await self._on_speaking_audio(pcm)
 
@@ -168,7 +185,7 @@ class Session:
         await self.set_state("listening")
 
     # ---------------------------------------------------------- listening: record until silence
-    async def _on_listening_audio(self, pcm):
+    async def _on_listening_audio(self, pcm, from_alarm=False):
         if time.monotonic() < self._deaf_until:
             return
         dur = len(pcm) * 1000 // RATE
@@ -188,20 +205,43 @@ class Session:
         if no_speech:
             log.info("[%s] nobody said anything", self.name)
             self._reset_listen()
-            await self.set_state("idle")
+            await self.set_state("alarm_listening" if from_alarm else "idle")
         elif done or too_long:
             audio = np.concatenate(self.rec)
             self._reset_listen()
             await self.set_state("thinking")
-            self._job = asyncio.create_task(self._process(audio))
+            self._job = asyncio.create_task(self._process(audio, from_alarm=from_alarm))
 
     # ---------------------------------------------------------- thinking -> speaking
-    async def _process(self, audio: np.ndarray):
+    async def _process(self, audio: np.ndarray, from_alarm=False):
         loop = asyncio.get_running_loop()
         try:
             t0 = time.time()
             text, lang = await loop.run_in_executor(None, self.app.stt.transcribe, audio)
             log.info("[%s] STT (%.1fs) [%s]: %r", self.name, time.time() - t0, lang, text)
+            alarm_command = alarm.parse_command(text) if text else None
+            if from_alarm:
+                if alarm_command and alarm_command["action"] == "cancel":
+                    self._alarm_listening = False
+                    await self.send_json({"type": "alarm_stop"})
+                    reply_text = "Будильник отключен." if lang == "ru" else "Alarm dismissed."
+                    pcm = await loop.run_in_executor(None, self.app.tts.synthesize, reply_text, lang)
+                    await self.speak(pcm)
+                return
+            if alarm_command:
+                if alarm_command["action"] == "set":
+                    when = alarm_command["when"]
+                    await self.send_json({"type": "alarm_set", "year": when.year,
+                                          "month": when.month, "day": when.day,
+                                          "hour": when.hour, "minute": when.minute})
+                    reply_text = ("Будильник установлен на %02d:%02d." if lang == "ru"
+                                  else "Alarm set for %02d:%02d.") % (when.hour, when.minute)
+                else:
+                    await self.send_json({"type": "alarm_stop"})
+                    reply_text = "Будильник отключен." if lang == "ru" else "Alarm dismissed."
+                pcm = await loop.run_in_executor(None, self.app.tts.synthesize, reply_text, lang)
+                await self.speak(pcm)
+                return
             reply = await loop.run_in_executor(None, brain.respond, text, lang) if text else None
             if reply and reply.text:
                 log.info("[%s] reply [%s]: %r", self.name, reply.lang, reply.text)
@@ -214,14 +254,24 @@ class Session:
             await self.send_json({"type": "state", "state": "error"})
             await asyncio.sleep(0.8)
         finally:
-            if self._interrupted:               # interrupted: the state is already "listening"
+            was_interrupted = self._interrupted
+            if was_interrupted:                 # state was set by the interrupting event
                 self._interrupted = False
-            else:
+            if self._alarm_listening and (from_alarm or self.state == "alarm_listening"):
+                self._reset_wake()
+                self._reset_listen()
+                try:
+                    await self.set_state("alarm_listening")
+                except websockets.ConnectionClosed:
+                    pass
+            elif not was_interrupted:
                 self._reset_wake()
                 try:
                     await self.set_state("idle")
                 except websockets.ConnectionClosed:
                     pass
+            if self._job is asyncio.current_task():
+                self._job = None
 
     async def speak(self, pcm: np.ndarray):
         """Streams audio in real time (with a small lead) so that `stop` reaches the speaker

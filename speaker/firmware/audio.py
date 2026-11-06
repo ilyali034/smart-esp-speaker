@@ -77,7 +77,9 @@ async def mic_task():
             continue
         if len(_send_q) >= config.SEND_Q_MAX:
             _send_q.pop(0)              # network is slow: drop the oldest
-        _send_q.append(bytes(pcm))      # copy: pcm is overwritten by the next read
+        # Exclude locally played alarm tones from server-side VAD/STT; the mic
+        # remains live between beeps so the user can dismiss the alarm by voice.
+        _send_q.append(bytes(len(pcm)) if st.alarm_beep else bytes(pcm))
 
 
 async def send_task():

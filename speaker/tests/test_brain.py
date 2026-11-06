@@ -1,11 +1,12 @@
 import os
 import sys
 import unittest
+import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 
 from speaker_server import voices  # noqa: E402
-from speaker_server.brain import i18n, local, text, web  # noqa: E402
+from speaker_server.brain import alarm, i18n, local, text, web  # noqa: E402
 
 
 class TestText(unittest.TestCase):
@@ -53,6 +54,33 @@ class TestLocal(unittest.TestCase):
     def test_no_match(self):
         self.assertIsNone(local.handle("tell me about cats", "en"))
         self.assertIsNone(local.handle("расскажи про кошек", "ru"))
+
+
+class TestAlarm(unittest.TestCase):
+    def test_set_alarm_today_or_next_day(self):
+        now = datetime.datetime(2026, 11, 6, 6, 0)
+        result = alarm.parse_command("поставь будильник на 7:30", now)
+        self.assertEqual(result["when"], now.replace(hour=7, minute=30))
+        words = alarm.parse_command("разбуди меня в семь тридцать утра", now)
+        self.assertEqual((words["when"].hour, words["when"].minute), (7, 30))
+        spoken = alarm.parse_command("поставь будильник на семь часов тридцать минут", now)
+        self.assertEqual((spoken["when"].hour, spoken["when"].minute), (7, 30))
+        tomorrow = alarm.parse_command("заведи будильник на 5 утра", now)
+        self.assertEqual(tomorrow["when"].date().day, 7)
+        self.assertEqual((tomorrow["when"].hour, tomorrow["when"].minute), (5, 0))
+
+    def test_set_alarm_english_time_suffix(self):
+        now = datetime.datetime(2026, 11, 6, 8, 0)
+        result = alarm.parse_command("set an alarm for 7 pm", now)
+        self.assertEqual((result["when"].hour, result["when"].minute), (19, 0))
+
+    def test_cancel_alarm(self):
+        self.assertEqual(alarm.parse_command("отключи будильник"), {"action": "cancel"})
+        self.assertEqual(alarm.parse_command("dismiss the alarm"), {"action": "cancel"})
+
+    def test_invalid_or_unrelated_alarm_text(self):
+        self.assertIsNone(alarm.parse_command("поставь будильник на 25:80"))
+        self.assertIsNone(alarm.parse_command("расскажи про будильники"))
 
 
 class TestWeb(unittest.TestCase):

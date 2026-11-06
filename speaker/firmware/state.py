@@ -12,6 +12,8 @@ class State:
         self.ws = None                      # active WebSocket or None
         self.volume_q8 = config.VOLUME_Q8
         self.last_audio_ms = 0              # last time audio was played
+        self.alarm_ringing = False
+        self.alarm_beep = False
 
 
 st = State()

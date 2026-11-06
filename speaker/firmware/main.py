@@ -8,6 +8,7 @@ import asyncio
 import machine
 
 import audio
+import alarm
 import config
 import controls
 import led
@@ -19,6 +20,7 @@ TASKS = (
     audio.mic_task,
     audio.send_task,
     audio.play_task,
+    alarm.task,
     controls.task,
     link.task,
     supervisor.task,
