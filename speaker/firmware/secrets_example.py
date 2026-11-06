@@ -1,0 +1,4 @@
+WIFI_SSID = "your-ssid"
+WIFI_PASSWORD = "your-password"
+SERVER_HOST = "192.168.0.100"
+SERVER_PORT = 8765

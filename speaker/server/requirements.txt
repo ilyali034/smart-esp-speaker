@@ -1,0 +1,5 @@
+numpy
+websockets
+faster-whisper
+openwakeword
+# Piper is installed separately (`piper` binary in PATH, or use --piper-bin)
