@@ -1,5 +1,6 @@
 # Speaker firmware (ESP32-S3, MicroPython)
 
+![scheme](./sh.jpg)
 | File | Role |
 |---|---|
 | main.py | task list, startup, reset on fatal error |
