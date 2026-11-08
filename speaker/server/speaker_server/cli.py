@@ -7,7 +7,7 @@ def parse_args(argv=None):
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--wake-word", default=os.environ.get("WAKE_WORD", "hey_jarvis"),
-                   help="hey_jarvis, alexa, hey_mycroft, hey_rhasspy or a path to your own .onnx")
+                   help="wake model(s), comma-separated: hey_jarvis, alexa, or custom ONNX paths")
     p.add_argument("--wake-threshold", type=float, default=0.5)
     p.add_argument("--whisper-model", default="small", help="tiny/base/small/medium/large-v3 (not the *.en models)")
     p.add_argument("--languages", default=os.environ.get("LANGUAGES", "en,ru"),

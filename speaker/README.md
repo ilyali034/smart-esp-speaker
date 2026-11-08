@@ -35,7 +35,9 @@ Languages: `--languages en,ru` (default). The spoken language is detected per ph
 Use `--whisper-model medium` if short phrases get detected wrongly.
 
 Wake word: openWakeWord ships English models (`hey_jarvis`, `alexa`, ...). They are used for both
-languages. Custom `.onnx` wake words are supported via `--wake-word path.onnx`.
+languages. Multiple built-in and custom ONNX models can be enabled together with comma-separated
+`--wake-word hey_jarvis,path/to/custom.onnx`. Single-word models for “Jarvis” / “Джарвис” must be
+trained separately; the built-in `hey_jarvis` model detects “Hey Jarvis”, not those aliases.
 
 ## Flash the firmware
 ```

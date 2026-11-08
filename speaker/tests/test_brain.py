@@ -5,8 +5,8 @@ import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 
-from speaker_server import voices  # noqa: E402
-from speaker_server.brain import alarm, i18n, local, text, web  # noqa: E402
+from speaker.server.speaker_server import voices, wake  # noqa: E402
+from speaker.server.speaker_server.brain import alarm, i18n, local, text, web  # noqa: E402
 
 
 class TestText(unittest.TestCase):
@@ -41,6 +41,10 @@ class TestLocal(unittest.TestCase):
     def test_date(self):
         self.assertTrue(local.handle("what's the date", "en")[0].startswith("Today is"))
         self.assertTrue(local.handle("какое сегодня число", "ru")[0].startswith("Сегодня"))
+
+    def test_capabilities(self):
+        self.assertIn("answer questions", local.handle("what can you do?", "en")[0])
+        self.assertIn("отвечать на вопросы", local.handle("что ты можешь?", "ru")[0])
 
     def test_language_follows_matched_command(self):
         # STT said "en" but the phrase is Russian: the reply language must be Russian
@@ -109,6 +113,18 @@ class TestVoices(unittest.TestCase):
 
     def test_bare_path_is_any(self):
         self.assertEqual(voices.collect_voice_specs(["voice.onnx"], {}), {"*": "voice.onnx"})
+
+
+class TestWakeModels(unittest.TestCase):
+    def test_parse_multiple_models(self):
+        self.assertEqual(
+            wake.parse_models("hey_jarvis, models/jarvis.onnx, models/dzharvis.onnx"),
+            ["hey_jarvis", "models/jarvis.onnx", "models/dzharvis.onnx"],
+        )
+
+    def test_parse_model_sequence(self):
+        self.assertEqual(wake.parse_models(["hey_jarvis", "models/jarvis.onnx"]),
+                         ["hey_jarvis", "models/jarvis.onnx"])
 
 
 if __name__ == "__main__":

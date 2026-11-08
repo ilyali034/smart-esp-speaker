@@ -58,6 +58,11 @@ def _date_en(m, text):
     return "Today is %s, %s %d, %d" % (_WEEKDAYS["en"][d.weekday()], _MONTHS["en"][d.month - 1], d.day, d.year)
 
 
+@command("en", r"what can you do|what are you able to do|what do you do|what can you help me with")
+def _capabilities_en(m, text):
+    return "I can answer questions, tell you the time and date, and set or cancel alarms."
+
+
 @command("en", r"(hi|hello|hey|good morning|good afternoon|good evening)(?: there)?[\s!.,]*", full=True)
 def _hello_en(m, text):
     return "Hello! I'm listening."
@@ -81,6 +86,11 @@ def _time_ru(m, text):
 def _date_ru(m, text):
     d = datetime.date.today()
     return "Сегодня %s, %d %s %d года" % (_WEEKDAYS["ru"][d.weekday()], d.day, _MONTHS["ru"][d.month - 1], d.year)
+
+
+@command("ru", r"что\s+ты\s+(?:можешь|умеешь)(?:\s+делать)?|чем\s+ты\s+можешь\s+помочь")
+def _capabilities_ru(m, text):
+    return "Я могу отвечать на вопросы, сообщать время и дату, а также ставить и отключать будильники."
 
 
 @command("ru", r"(привет|здравствуй|здравствуйте|добрый день|доброе утро|добрый вечер)[\s!.,]*", full=True)
